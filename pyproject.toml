@@ -1,0 +1,27 @@
+[project]
+name = "jabref-mcp"
+version = "0.1.0"
+description = "MCP server bridging OpenCode and a JabRef 5.x bibliography (read via .bib parsing, write via the official --importBibtex API)."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=2.0,<3",
+    "bibtexparser>=1.4.3,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+jabref-mcp = "jabref_mcp.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
