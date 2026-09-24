@@ -9,7 +9,7 @@
           // Point this at your real JabRef libraries (comma-separated).
           // The sample below makes the server work out of the box when OpenCode
           // is started from this repository.
-          "JABREF_MCP_BIB_FILES": "/home/lukas/misc/JabRefMCP/tests/sample.bib"
+          "JABREF_MCP_BIB_FILES": "tests/sample.bib"
         }
       }
     }
