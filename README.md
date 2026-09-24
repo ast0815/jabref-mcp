@@ -32,27 +32,35 @@ JabRef 5.x has **no HTTP read API** (that arrives in 6.x). So:
 | `JABREF_MCP_JABREF_BIN` | `jabref` / `JabRef` on PATH | JabRef executable or command prefix (e.g. `flatpak-spawn --host jabref`) |
 | `JABREF_MCP_IMPORT_TIMEOUT` | `90` | Import timeout (seconds) |
 
-## Run
+## Run / install
+
+From a checkout (development):
 
 ```sh
-uv sync --extra dev
-uv run python -m jabref_mcp
+uv sync
+uv run jabref-mcp
 ```
 
-Smoke-test the tools:
+From PyPI (published releases):
 
 ```sh
-uv run python -c "from fastmcp import Client; from jabref_mcp.server import create_app; import anyio; \
-anyio.run(lambda: (print('ok')))"
+uvx jabref-mcp
+```
+
+Before a release is published, uvx can build straight from the GitHub repo:
+
+```sh
+uvx --from git+https://github.com/ast0815/jabref-mcp jabref-mcp
 ```
 
 ## Register with OpenCode
 
-A project-level registration is already provided in `opencode.jsonc`. To use it,
-start OpenCode from this directory. Alternatively register globally:
+A project-level registration is already provided in `opencode.jsonc` (it runs
+`uvx jabref-mcp`). To use it, start OpenCode from this directory. Alternatively
+register globally:
 
 ```sh
-opencode mcp add jabref -- uv run python -m jabref_mcp
+opencode mcp add jabref -- uvx jabref-mcp
 ```
 
 (Add `--global` to make it available in every project; then set

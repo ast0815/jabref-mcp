@@ -1,27 +1,55 @@
 [project]
 name = "jabref-mcp"
-version = "0.1.0"
+dynamic = ["version"]
 description = "MCP server bridging OpenCode and a JabRef 5.x bibliography (read via .bib parsing, write via the official --importBibtex API)."
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "jabref-mcp contributors" }]
+keywords = ["mcp", "jabref", "bibtex", "bibliography", "reference-management"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: AsyncIO",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     "fastmcp>=2.0,<3",
     "bibtexparser>=1.4.3,<2",
 ]
 
-[project.optional-dependencies]
+[project.scripts]
+jabref-mcp = "jabref_mcp.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/ast0815/jabref-mcp"
+Repository = "https://github.com/ast0815/jabref-mcp"
+
+[dependency-groups]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
 ]
 
-[project.scripts]
-jabref-mcp = "jabref_mcp.__main__:main"
-
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jabref_mcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 asyncio_mode = "auto"

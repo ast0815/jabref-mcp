@@ -4,8 +4,7 @@
     "servers": {
       "jabref": {
         "type": "local",
-        "command": ["uv", "run", "python", "-m", "jabref_mcp"],
-        "cwd": ".",
+        "command": ["uvx", "jabref-mcp"],
         "environment": {
           // Point this at your real JabRef libraries (comma-separated).
           // The sample below makes the server work out of the box when OpenCode
