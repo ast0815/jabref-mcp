@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import jabref_mcp.bibtex_io as bibtex_io
 from jabref_mcp.bibtex_io import (
     LibrarySet,
     entry_bibtex,
@@ -32,6 +33,55 @@ def test_load_and_count_entries():
     assert len(libs) == 1
     keys = {e["ID"] for e in libs[0].entries}
     assert keys == {"knuth1984literate", "vaswani2017attention", "cormode2008sketching", "chocolate2026yummy"}
+
+
+def test_changed_library_refreshes_on_next_read(tmp_path):
+    bib = tmp_path / "changing.bib"
+    bib.write_text("@article{first, title={First version}}\n", encoding="utf-8")
+    ls = LibrarySet(bib_files=[str(bib)])
+
+    assert ls.find_entry("first") is not None
+
+    bib.write_text(
+        "@article{second, title={Externally added second version with more text}}\n",
+        encoding="utf-8",
+    )
+
+    assert ls.find_entry("first") is None
+    found = ls.find_entry("second")
+    assert found is not None
+    assert found[1]["title"] == "Externally added second version with more text"
+
+
+def test_only_changed_library_is_reparsed(tmp_path, monkeypatch):
+    first = tmp_path / "first.bib"
+    second = tmp_path / "second.bib"
+    first.write_text("@article{first, title={First}}\n", encoding="utf-8")
+    second.write_text("@article{second, title={Second}}\n", encoding="utf-8")
+    ls = LibrarySet(bib_files=[str(first), str(second)])
+
+    initial = ls.libraries()
+    calls: list[str] = []
+    original_load = bibtex_io.load_library
+
+    def tracked_load(path: str):
+        calls.append(path)
+        return original_load(path)
+
+    monkeypatch.setattr(bibtex_io, "load_library", tracked_load)
+
+    assert ls.libraries() == initial
+    assert calls == []
+
+    first.write_text("@article{first, title={First changed externally}}\n", encoding="utf-8")
+    refreshed = ls.libraries()
+
+    assert calls == [str(first)]
+    assert refreshed[0] is not initial[0]
+    assert refreshed[1] is initial[1]
+    assert ls.find_entry("first") is not None
+    assert ls.find_entry("second") is not None
+    assert calls == [str(first)]
 
 
 def test_search_by_title_word():

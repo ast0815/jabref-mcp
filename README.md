@@ -86,8 +86,12 @@ opencode mcp add jabref -- uvx jabref-mcp
 
 - The server *reads* the `.bib` files; it never writes to them. Additions go
   through JabRef, which handles duplicate detection and library updates.
-- Configured `.bib` files are parsed once per server instance. Restart the MCP
-  process (or explicitly reload) after an external library change; re-running a
-  tool does not refresh the cache.
+  `add_entry` returns after dispatching the import; JabRef may still require you
+  to accept it and save the library. After saving, verify with `search` using stable
+  metadata such as title, DOI, or author because JabRef may replace the submitted
+  citation key.
+- Configured `.bib` files are cached, but checked for changes before every read.
+  After JabRef saves a library, the next MCP read automatically reparses only the
+  changed file; restarting the MCP is not required.
 - This project targets JabRef 5.x. JabRef 6.x has a different CLI/API surface
   and is not claimed to be supported.

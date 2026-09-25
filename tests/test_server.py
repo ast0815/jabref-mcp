@@ -52,6 +52,17 @@ async def test_tools_registered(client: Client):
     } <= names
 
 
+async def test_add_entry_description_explains_post_dispatch_workflow(client: Client):
+    tools = await client.list_tools()
+    description = next(tool.description or "" for tool in tools if tool.name == "add_entry")
+
+    assert "Workflow after successful dispatch" in description
+    assert "Do not claim that the entry is persisted yet" in description
+    assert "title, DOI, or author" in description
+    assert "JabRef may replace the submitted citation key" in description
+    assert "Do not ask for an MCP restart" in description
+
+
 async def test_list_libraries(client: Client):
     out = await call(client, "list_libraries")
     assert "sample.bib (4 entries)" in out
@@ -66,6 +77,24 @@ async def test_list_entries(client: Client):
 async def test_search_tool(client: Client):
     out = await call(client, "search", query="attention")
     assert "vaswani2017attention" in out
+
+
+async def test_read_tools_refresh_after_external_change(tmp_path: Path):
+    bib = tmp_path / "changing.bib"
+    bib.write_text("@article{before, title={Before change}}\n", encoding="utf-8")
+    app = make_app(bib_files=[str(bib)])
+
+    async with app as client:
+        assert "before" in await call(client, "search", query="Before")
+
+        bib.write_text(
+            "@article{after, title={After external change with additional text}}\n",
+            encoding="utf-8",
+        )
+
+        assert "after" in await call(client, "search", query="external")
+        entry = await call(client, "get_entry", citation_key="after")
+        assert "After external change" in entry
 
 
 async def test_search_matches_citation_key(client: Client):
@@ -112,7 +141,7 @@ async def test_add_entry_empty_error(client: Client):
 
 
 async def test_add_entry_success_via_fake_jabref(tmp_path: Path):
-    """Happy path: valid BibTeX is handed to `jabref --importBibtex` and reported as imported."""
+    """Happy path: valid BibTeX is handed to `jabref --importBibtex` and reported as dispatched."""
     from helpers import write_fake_jabref
 
     fake = write_fake_jabref(tmp_path)
@@ -122,7 +151,11 @@ async def test_add_entry_success_via_fake_jabref(tmp_path: Path):
     async with app as client:
         out = text_of(await client.call_tool("add_entry", {"bibtex": bibtex}))
 
-    assert "Entry imported" in out
+    assert "Entry sent to JabRef" in out
+    assert "accept the import" in out
+    assert "confirm when done" in out
+    assert "search using stable metadata" in out
+    assert "no restart is needed" in out
     assert "@article{demo2024," in out
 
     calls = (tmp_path / "calls.log").read_text().splitlines()
@@ -138,5 +171,5 @@ async def test_add_entry_failure_via_fake_jabref(tmp_path: Path):
 
     app = make_app(jabref_bin=str(fake))
     async with app as client:
-        with pytest.raises(ToolError, match="JabRef rejected the import"):
+        with pytest.raises(ToolError, match="JabRef import command failed"):
             await client.call_tool("add_entry", {"bibtex": "@article{k, title={T}}"})

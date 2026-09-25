@@ -142,8 +142,9 @@ def create_app(config: Config | None = None) -> FastMCP:
     def add_entry(bibtex: str, timeout: int | None = None) -> str:
         """Add a new entry to the JabRef library - the ONLY supported way of adding entries.
 
-        This imports the BibTeX through JabRef's official CLI API (`jabref --importBibtex`), which means:
-        - the entry is added to the library that is OPEN in JabRef, with JabRef's own duplicate detection;
+        This requests an import through JabRef's official CLI API (`jabref --importBibtex`), which means:
+        - the entry is sent to the library that is OPEN in JabRef, with JabRef's own duplicate detection;
+        - JabRef may ask you to accept the import before you save the library;
         - the .bib file is never modified by this server.
         Requires JabRef to be running with 'Listen to remote operation on port' enabled
         (Preferences -> Network), same as for the official browser extension.
@@ -152,7 +153,18 @@ def create_app(config: Config | None = None) -> FastMCP:
             bibtex: a complete BibTeX entry, e.g. '@article{key, title={...}, author={...}, year={2024}}'.
             timeout: optional override of the import timeout in seconds.
 
-        Returns the canonical BibTeX that was sent to JabRef.
+        Returns the canonical BibTeX that was sent to JabRef. A successful return confirms
+        dispatch to JabRef, not that the entry has already been accepted and saved.
+
+        Workflow after successful dispatch:
+        - Ask the user to accept and save the import in JabRef if prompted, and to confirm
+          when the library has been saved before attempting verification.
+        - Do not claim that the entry is persisted yet.
+        - After the user confirms saving, verify with search using stable metadata such as
+          title, DOI, or author, rather than relying only on the submitted citation key.
+        - JabRef may replace the submitted citation key; use the key returned by search when
+          calling get_entry or get_pdf.
+        - Read tools automatically detect the saved file. Do not ask for an MCP restart.
         """
         bibtex = bibtex.strip()
         if not bibtex:
@@ -177,14 +189,17 @@ def create_app(config: Config | None = None) -> FastMCP:
         if not result.ok:
             detail = result.stderr or result.stdout or f"exit code {result.returncode}"
             raise RuntimeError(
-                f"JabRef rejected the import (exit code {result.returncode}): {detail}\n"
+                f"JabRef import command failed (exit code {result.returncode}): {detail}\n"
                 "Make sure JabRef is running and 'Listen to remote operation on port' is "
                 "enabled under Preferences -> Network."
             )
         return (
-            "Entry imported into JabRef (into the library currently open in JabRef; "
-            "JabRef applies its own duplicate detection). No .bib file was modified by this server.\n"
-            f"Imported BibTeX:\n{canonical}"
+            "Entry sent to JabRef (the library currently open in JabRef; JabRef applies "
+            "its own duplicate detection). JabRef may ask you to accept the import; save "
+            "the library and confirm when done. Then verify with search using stable "
+            "metadata because JabRef may have changed the citation key. MCP reads refresh "
+            "automatically; no restart is needed. No .bib file was modified by this server.\n"
+            f"Sent BibTeX:\n{canonical}"
         )
 
     return mcp

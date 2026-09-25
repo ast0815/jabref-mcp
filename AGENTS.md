@@ -31,9 +31,9 @@
 
 ## Read-path gotchas
 
-- `LibrarySet` parses each library once per server instance. Restart the MCP process
-  (or explicitly reload it in code) after an external `.bib` change; repeating a
-  tool call alone does not rebuild the cache.
+- `LibrarySet` caches parsed libraries but checks filesystem metadata before every
+  read and automatically reparses only changed files. Preserve this behavior when
+  changing the read path; external JabRef saves must not require an MCP restart.
 - `bibtex_io.load_library` deliberately removes JabRef `@comment` metadata and
   braces bare full-month values before calling `bibtexparser`; preserve the
   regression tests if changing this preprocessing.

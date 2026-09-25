@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from threading import RLock
 
 import bibtexparser
 from bibtexparser.bibdatabase import BibDatabase, UndefinedString
@@ -204,6 +205,18 @@ def load_libraries(paths: list[str]) -> list[Library]:
     return [load_library(p) for p in paths]
 
 
+_FileSignature = tuple[int, int, int, int] | None
+
+
+def _file_signature(path: str) -> _FileSignature:
+    """Return cheap change metadata for a library file, or ``None`` if missing."""
+    try:
+        stat = Path(path).stat()
+    except OSError:
+        return None
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+
+
 def entry_bibtex(entry: dict) -> str:
     """Re-serialize one parsed entry as BibTeX."""
     etype = entry.get("ENTRYTYPE", "misc")
@@ -293,20 +306,66 @@ def linked_files(entry: dict, library: Library, pdf_root: str | None) -> list[Li
 
 
 class LibrarySet:
-    """All configured libraries with search/lookup operations."""
+    """Configured libraries with automatic refresh and search/lookup operations."""
 
     def __init__(self, bib_files: list[str], pdf_root: str | None = None):
         self.bib_files = list(bib_files)
         self.pdf_root = pdf_root
+        self._lock = RLock()
         self._libraries: list[Library] | None = None
+        self._signatures: list[_FileSignature] = []
 
     def reload(self) -> None:
-        self._libraries = load_libraries(self.bib_files)
+        """Re-read every configured library."""
+        with self._lock:
+            libraries: list[Library] = []
+            signatures: list[_FileSignature] = []
+            for path in self.bib_files:
+                # Capture the signature first. If JabRef replaces the file while
+                # it is being parsed, the next read observes a different value
+                # and retries instead of retaining a potentially mixed snapshot.
+                signatures.append(_file_signature(path))
+                libraries.append(load_library(path))
+            self._libraries = libraries
+            self._signatures = signatures
 
-    def libraries(self) -> list[Library]:
+    def _reload_changed(self) -> None:
+        """Reload only libraries whose filesystem signatures changed.
+
+        Caller must hold ``_lock``.
+        """
         if self._libraries is None:
             self.reload()
-        return self._libraries
+            return
+
+        changed = [
+            index
+            for index, path in enumerate(self.bib_files)
+            if _file_signature(path) != self._signatures[index]
+        ]
+        if not changed:
+            return
+
+        libraries = list(self._libraries)
+        signatures = list(self._signatures)
+        for index in changed:
+            path = self.bib_files[index]
+            signatures[index] = _file_signature(path)
+            libraries[index] = load_library(path)
+        self._libraries = libraries
+        self._signatures = signatures
+
+    def libraries(self) -> list[Library]:
+        """Return a current snapshot, reparsing changed files on demand."""
+        with self._lock:
+            if self._libraries is None:
+                self.reload()
+            else:
+                self._reload_changed()
+            libraries = self._libraries
+            if libraries is None:  # pragma: no cover - reload always assigns or raises
+                raise RuntimeError("library cache was not initialized")
+            return libraries
 
     def all_entries(self) -> list[tuple[Library, dict]]:
         return [(lib, entry) for lib in self.libraries() for entry in lib.entries]
