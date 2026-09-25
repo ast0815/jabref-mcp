@@ -3,25 +3,30 @@
 A [Model Context Protocol](https://modelcontextprotocol.io/) server that lets
 OpenCode (and other MCP clients) work with your **JabRef 5.x** bibliography:
 
-- **Search** your library (title / author / year / keywords / DOI / full text)
+- **Search** your library (title / author / year / keywords / DOI and other BibTeX fields)
 - **Read** full records (BibTeX + abstract) and resolve **attached PDF paths**, so the assistant can read and **summarize papers** itself
-- **Add** new entries — *only* through JabRef's official import API, never by editing your `.bib` files
+- **Add** new entries through JabRef's command-line import, never by editing your `.bib` files
 
 ## Why this shape (JabRef 5.x)
 
-JabRef 5.x has **no HTTP read API** (that arrives in 6.x). So:
+JabRef 5.x does not expose a supported HTTP read API for this project, so:
 
 | Operation | Mechanism |
 |---|---|
 | Search / read / list | parse your `.bib` file(s) locally |
-| Add an entry | `jabref --importBibtex "<bibtex>"` — the exact channel the official browser extension uses. With *Remote operation* enabled, the running JabRef imports into the **currently open library**, with its own duplicate detection. |
+| Add an entry | `jabref --importBibtex "<bibtex>"` through JabRef's command-line interface. When JabRef's single-instance/remote-operation feature is enabled, the command can be forwarded to the running instance and its currently open library. |
+
+The MCP transport is **stdio**: the server is launched as a local process and
+does not listen on a network port. JabRef's remote-operation setting is a
+separate JabRef feature.
 
 ## Requirements
 
 - Python ≥ 3.10 and [uv](https://docs.astral.sh/uv/)
-- JabRef installed, with **`jabref` on PATH** (or `JABREF_MCP_JABREF_BIN` set)
-- For adding entries: JabRef **running** with *Listen to remote operation on port* enabled
-  (**Preferences → Network** — the same requirement as the official browser extension)
+- JabRef 5.x installed, with **`jabref` on PATH** (or `JABREF_MCP_JABREF_BIN` set)
+- To add entries to an already-running JabRef instance, enable **Enforce single
+  JabRef instance (and allow remote operations)** under **Preferences → General**.
+  In older JabRef 5.x releases this option may be under **Network**.
 
 ## Configuration (environment variables)
 
@@ -80,9 +85,9 @@ opencode mcp add jabref -- uvx jabref-mcp
 ## Notes
 
 - The server *reads* the `.bib` files; it never writes to them. Additions go
-  through JabRef. Petty duplicate detection, group assignment, etc. are handled
-  by JabRef itself.
-- If your library changes in JabRef, re-run `search`/`get_entry` — the files
-  are re-read per call.
-- JabRef 6.x will (eventually) ship its own REST API; this server is a drop-in
-  for 5.x and can later be re-pointed at `localhost:23119`.
+  through JabRef, which handles duplicate detection and library updates.
+- Configured `.bib` files are parsed once per server instance. Restart the MCP
+  process (or explicitly reload) after an external library change; re-running a
+  tool does not refresh the cache.
+- This project targets JabRef 5.x. JabRef 6.x has a different CLI/API surface
+  and is not claimed to be supported.
