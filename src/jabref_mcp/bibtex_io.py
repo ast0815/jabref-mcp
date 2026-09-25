@@ -16,10 +16,96 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import bibtexparser
-from bibtexparser.bibdatabase import BibDatabase
+from bibtexparser.bibdatabase import BibDatabase, UndefinedString
+from bibtexparser.bparser import BibTexParser
 
 # Fields that are "structural" in bibtexparser's dict representation.
 _STRUCTURAL_FIELDS = frozenset({"ENTRYTYPE", "ID"})
+
+# Full month names are NOT BibTeX macros (only jan..dec are). An unbraced value
+# like "month = July" is treated as an @string reference, which is undefined
+# almost everywhere and makes bibtexparser abort the whole file.
+_FULL_MONTH_NAMES = (
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+)
+_BARE_MONTH_RE = re.compile(
+    r"([A-Za-z][A-Za-z0-9_.-]*\s*=\s*)(" + "|".join(_FULL_MONTH_NAMES) + r")(?=[,}\s]|$)",
+    re.IGNORECASE,
+)
+
+
+def normalize_bare_month_names(text: str) -> str:
+    """Brace bare full-month-name field values (``month = July,`` -> ``month = {July},``).
+
+    JabRef and BibTeX tolerate full month names as literal values, but an
+    unbraced identifier is expanded as an ``@string`` reference; ``july`` is
+    (almost) never defined, so bibtexparser raises ``UndefinedString`` and the
+    whole library becomes unreadable.
+
+    Only *bare* values are rewritten: scan is brace/quote-aware, so values that
+    are already braced or quoted (literals, titles, abstracts, ``@string``
+    definitions) are left untouched. Because it is not anchored to line starts,
+    the fix also covers single-line entries like ``@article{k, month = July,}``.
+    """
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    depth = 0  # brace depth: 0 = outside anything, 1 = inside an entry body
+    in_quote = False
+    while i < n:
+        ch = text[i]
+        if in_quote:
+            out.append(ch)
+            if ch == '"':
+                in_quote = False
+            i += 1
+            continue
+        if ch == '"':
+            # "..." only delimits a string VALUE at entry-field level (depth 1).
+            # Inside braced values (depth >= 2) quotes are literal text
+            # (titles, abstracts, URLs...), and must not disturb brace tracking.
+            if depth == 1:
+                in_quote = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "{":
+            depth += 1
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "}":
+            depth = max(0, depth - 1)
+            out.append(ch)
+            i += 1
+            continue
+        # Bare field values only occur at depth <= 1 (entry body or stray text);
+        # braced values (titles, abstracts, ...) live at depth >= 2.
+        if depth <= 1 and ch.isalpha():
+            match = _BARE_MONTH_RE.match(text, i)
+            if match:
+                out.append(match.group(1) + "{" + match.group(2) + "}")
+                i = match.end()
+                continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _make_parser() -> BibTexParser:
+    """Parser that keeps non-standard entry types (e.g. @Electronic)."""
+    return BibTexParser(ignore_nonstandard_types=False)
 
 
 def strip_jabref_comments(text: str) -> str:
@@ -98,7 +184,15 @@ def load_library(path: str) -> Library:
         lib.parse_errors.append(f"cannot read {path}: {exc}")
         return lib
     cleaned = strip_jabref_comments(raw)
-    db: BibDatabase = bibtexparser.loads(cleaned)
+    cleaned = normalize_bare_month_names(cleaned)
+    try:
+        db: BibDatabase = bibtexparser.loads(cleaned, parser=_make_parser())
+    except UndefinedString as exc:
+        raise ValueError(
+            f"{path}: BibTeX references the undefined @string '{exc}' "
+            "(e.g. an unbraced value like 'month = July' instead of 'month = {July}'). "
+            "Brace the value in JabRef and try again."
+        ) from exc
     for entry in db.entries:
         if entry.get("ENTRYTYPE", "").lower() in {"comment", "string", "preamble"}:
             continue

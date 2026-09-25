@@ -6,6 +6,7 @@ from jabref_mcp.bibtex_io import (
     LibrarySet,
     entry_bibtex,
     linked_files,
+    load_library,
     strip_jabref_comments,
 )
 
@@ -102,3 +103,67 @@ def test_linked_files_pdf_root_fallback(tmp_path):
 def test_missing_key_not_found():
     ls = make_set()
     assert ls.find_entry("does-not-exist") is None
+
+
+def test_bare_month_names_are_braced_before_parsing(tmp_path):
+    bib = tmp_path / "months.bib"
+    bib.write_text(
+        "@article{a2024, title={T}, month = July},\n"
+        "@article{b2024, title={T2}, month = july,\n"
+        "  year = 2024}\n",
+        encoding="utf-8",
+    )
+    ls = LibrarySet(bib_files=[str(bib)])
+    months = {e["ID"]: e["month"] for _, e in ls.all_entries()}
+    # Braced literals keep their original spelling (july!="July").
+    assert months == {"a2024": "July", "b2024": "july"}
+
+
+def test_full_month_names_inside_braces_or_quotes_untouched(tmp_path):
+    bib = tmp_path / "months2.bib"
+    bib.write_text(
+        '@article{c2024, title={Written in July 2020}, month = "July"},\n',
+        encoding="utf-8",
+    )
+    ls = LibrarySet(bib_files=[str(bib)])
+    _, entry = ls.find_entry("c2024")  # type: ignore[assignment]
+    assert entry["title"] == "Written in July 2020"
+    assert entry["month"] == "July"
+
+
+def test_literal_quotes_in_braced_values_do_not_break_scanning(tmp_path):
+    # Regression: titles/abstracts commonly contain literal " quotes; the
+    # scanner must treat them as text, not string delimiters, or it drifts
+    # and misses later bare months.
+    bib = tmp_path / "quotes.bib"
+    bib.write_text(
+        '@article{q2020, title={Corrigendum to "The Aachen gas-database v2021.2"},\n'
+        "  month = July,\n"
+        "  year = 2022}\n",
+        encoding="utf-8",
+    )
+    ls = LibrarySet(bib_files=[str(bib)])
+    _, entry = ls.find_entry("q2020")  # type: ignore[assignment]
+    assert entry["month"] == "July"
+    assert "The Aachen gas-database v2021.2" in entry["title"]
+
+
+def test_nonstandard_entry_type_kept(tmp_path):
+    bib = tmp_path / "electronic.bib"
+    bib.write_text(
+        "@Electronic{NuDat, title={T}, howpublished={Web}}\n", encoding="utf-8"
+    )
+    ls = LibrarySet(bib_files=[str(bib)])
+    hits = ls.all_entries()
+    assert [(e["ENTRYTYPE"], e["ID"]) for _, e in hits] == [("electronic", "NuDat")]
+
+
+def test_undefined_string_raises_helpful_error(tmp_path):
+    import pytest
+
+    bib = tmp_path / "bad.bib"
+    bib.write_text(
+        "@article{d2024, title={T}, publisher = UnpublishedPress}\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="UnpublishedPress".lower()):
+        load_library(str(bib))
