@@ -56,8 +56,8 @@ uvx --from git+https://github.com/ast0815/jabref-mcp jabref-mcp
 ## Register with OpenCode
 
 A project-level registration is already provided in `opencode.jsonc` (it runs
-`uvx jabref-mcp`). To use it, start OpenCode from this directory. Alternatively
-register globally:
+`uv run jabref-mcp`, i.e. the code in this checkout). To use it, start OpenCode
+from this directory. Alternatively register globally:
 
 ```sh
 opencode mcp add jabref -- uvx jabref-mcp

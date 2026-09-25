@@ -4,11 +4,14 @@
     "servers": {
       "jabref": {
         "type": "local",
-        "command": ["uvx", "jabref-mcp"],
+        "command": ["uv", "run", "jabref-mcp"],
         "environment": {
-          // Point this at your real JabRef libraries (comma-separated).
-          // The sample below makes the server work out of the box when OpenCode
-          // is started from this repository.
+          // Runs the code in this checkout via `uv run` (includes fixes not yet
+          // published to PyPI). The MCP points at the in-repo sample library so
+          // OpenCode works out of the box when started from this repository.
+          // For your real libraries, override JABREF_MCP_BIB_FILES locally and
+          // keep that change uncommitted (see AGENTS.md: never commit
+          // references to files outside the repo).
           "JABREF_MCP_BIB_FILES": "tests/sample.bib"
         }
       }
